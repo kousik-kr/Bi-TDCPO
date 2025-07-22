@@ -16,8 +16,8 @@ public class Node {
 	private	double longitude;
 	private boolean backward_reachebility;
 	private double backward_hScore;
-	private double forward_hScore;
-	private boolean forward_reachebility;
+	private double forward_hScore;//fastest path cost for forward search
+	private boolean forward_reachebility;//fastest path cost for backward search
 	private boolean feasible;
 	private boolean middle_node;
 	private boolean forward_label;

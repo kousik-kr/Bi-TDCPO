@@ -56,7 +56,7 @@ public class Label{
 		return linear_function(x1, x2, y1, y2, departure_time);
 	}
 
-	public int get_score(int departure_time) {
+	public int get_score(double departure_time) {
 		Function required_function = null;
 		Function current_function = this.score;
 		while(current_function!=null) {

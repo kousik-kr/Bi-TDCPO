@@ -29,7 +29,7 @@ public class Function {
 		this.next_function = function;
 	}
 
-	public boolean inInterval(int departure_time) {
+	public boolean inInterval(double departure_time) {
 		if(departure_time>=this.break_points.get(0).getX() && departure_time<=this.break_points.get(this.break_points.size()-1).getX())
 			return true;
 		return false;

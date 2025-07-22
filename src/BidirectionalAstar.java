@@ -8,9 +8,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ForkJoinPool;
@@ -191,76 +189,6 @@ public class BidirectionalAstar {
 		writer.close();
 		fout.close();
 		System.out.println("All query processing is done.");
-	}
-
-private static Result get_result(double start_departure_time, double end_departure_time, double budget, int destination, List<Label> outputLabels) throws IOException {
-		
-		double dep_time = -1;
-		double arr_time = -1;
-		double scr = -1;
-
-		for(Label destination_label: outputLabels) {
-					
-//			int current = destination;
-//			List<Integer> path = new ArrayList<Integer>();
-//		    while(!destination_label.getVisitedList().get(current).equals(-1)) {
-//				path.add(current);
-//		    	current = destination_label.getVisitedList().get(current);
-//		    }
-//
-//			path.add(current);
-//			Collections.reverse(path);
-//			
-//			for(int i:path)
-//				writer3.write(i+",");
-//			writer3.write("\n");
-			//writer2.write("[");
-			Function current_score_function = destination_label.get_score();
-			Function current_arrival_function = destination_label.get_arrivalTime();
-			
-			while(current_score_function != null) {
-				List<BreakPoint> score_breakpoints = current_score_function.getBreakpoints();
-				List<BreakPoint> arrival_time_breakpoints = current_arrival_function.getBreakpoints();
-				for(int i =0;i<score_breakpoints.size();i++) {
-					double tmp_score = score_breakpoints.get(i).getY();
-					//writer2.write("("+ score_breakpoints.get(i).getX()+","+score_breakpoints.get(i).getY()+"), ");
-					if(tmp_score>scr) {
-						dep_time = arrival_time_breakpoints.get(i).getX();
-						arr_time = arrival_time_breakpoints.get(i).getY();
-						scr = tmp_score;
-					}
-				}
-				
-				current_score_function = current_score_function.getNextFunction();
-				current_arrival_function = current_arrival_function.getNextFunction();
-			}
-			//writer2.write("],\n");
-//			/int i= (int) start_departure_time;
-//			if(destination_label.get_arrivalTime().getBreakpoints().get(0).getX() >= i)
-//				i= (int) Math.ceil(destination_label.get_arrivalTime().getBreakpoints().get(0).getX());
-//			
-//			int j = (int) end_departure_time;
-//			if(destination_label.get_arrivalTime().getBreakpoints().get(destination_label.get_arrivalTime().getBreakpoints().size()-1).getX() <= j) 
-//				j= (int) Math.floor(destination_label.get_arrivalTime().getBreakpoints().get(destination_label.get_arrivalTime().getBreakpoints().size()-1).getX());
-//			
-//			for(; i<=j;i++) {
-//				double tmp_arr_time = destination_label.get_arrivalTime(i);//TODO
-//				if(tmp_arr_time-i<=budget) {
-//					int tmp_score = destination_label.get_score(i);
-//					
-//					if(tmp_score>scr) {
-//						dep_time = i;
-//						arr_time = tmp_arr_time;
-//						scr = tmp_score;
-//					}
-//				}
-//			}
-		}
-		//writer2.flush();
-		//writer3.flush();
-		
-		Result result = new Result(dep_time, scr);
-		return result;
 	}
 
 	public static void updateMemory() {
