@@ -22,7 +22,7 @@ public class BidirectionalAstar {
 	 * @param args
 	 */
 	private static final String currentDirectory = System.getProperty("user.dir");	//current directory of the code
-	public static int MAX_SPEED = 2400;
+	//public static int MAX_SPEED = 2400;
 	private static Queue<Query> queries = new LinkedList<Query>();
 	//public static double departure_time = 0;
 	@SuppressWarnings("unused")
@@ -38,6 +38,7 @@ public class BidirectionalAstar {
 	public static boolean optimization = true;
 	private static double interval_duration;
 	public static double THRESHOLD;
+	public static boolean forceStop = false;
 	
 //	private static HashMap<Integer, Integer> subgraphNodes = new HashMap<Integer, Integer>(); 
 //	private static HashMap<Integer, Integer> subgraphIndexes = new HashMap<Integer, Integer>(); 
@@ -49,7 +50,7 @@ public class BidirectionalAstar {
 		int n = 264346;//Integer.parseInt(args[1]);
 		density = 20;//Integer.parseInt(args[2]);
 		overhead = 30;//Double.parseDouble(args[3]);
-		no_of_core = 1;//Integer.parseInt(args[4]);
+		no_of_core = 24;//Integer.parseInt(args[4]);
 		TIME_LIMIT = 5;//Double.parseDouble(args[5]);
 		interval_duration = 360;//Integer.parseInt(args[6]);
 		THRESHOLD = 10;//Integer.parseInt(args[7]);
@@ -130,7 +131,7 @@ public class BidirectionalAstar {
 	}
 
 	private static void query_processing() throws IOException, InterruptedException, ExecutionException{
-		String output_file = "Output_iSCOPE_" + Graph.get_vertex_count() + ".txt";
+		String output_file = "Output_BiTDCPO_" + Graph.get_vertex_count() + ".txt";
 		FileWriter fout = new FileWriter(output_file);
 		BufferedWriter writer = new BufferedWriter(fout);
 		
@@ -138,6 +139,7 @@ public class BidirectionalAstar {
 		runtime = Runtime.getRuntime();
 		//int index=0;
 		while(!queries.isEmpty()){
+			forceStop=false;
 			double start_departure_time = queries.peek().get_start_departure_time();
 			
 			runtime.gc();
@@ -157,34 +159,33 @@ public class BidirectionalAstar {
 //						Graph.reset_blabeling();
 //						continue;
 //					}
-				writer.write(queries.peek().get_source() + " " + queries.peek().get_destination() + " " + start_departure_time
-						+ " " + queries.peek().get_budget() + " " + output.get_departureTime() + " " + output.get_score() + " " + (end - start) / 1000F +
-						"\t" + (memory_used/(1024*1024)) /*+  " " + solver.getNLabels()*/ + "\n");
+				writer.write(queries.peek().get_source() + "\t" + queries.peek().get_destination() + "\t" + start_departure_time
+						+ "\t" + queries.peek().get_budget() + "\t" + output.get_departureTime() + "\t" + output.get_score() + "\t" + (end - start) / 1000F +
+						"\t" + (memory_used/(1024*1024)) +  " " + forceStop + "\n");
 				writer.flush();
-//					System.out.println(queries.peek().get_source() + " " + queries.peek().get_destination() + " " + queries.peek().get_start_departure_time()
-//							+ " " + queries.peek().get_budget() + " " + output.get_departureTime() + " " + output.get_score() + " " + (end - start) / 1000F + 
-//							"\t" + (memory_used/(1024*1024))/* + " " + solver.getNLabels()*/);
+					System.out.println(queries.peek().get_source() + "\t" + queries.peek().get_destination() + "\t" + start_departure_time
+							+ "\t" + queries.peek().get_budget() + "\t" + output.get_departureTime() + "\t" + output.get_score() + "\t" + (end - start) / 1000F +
+							"\t" + (memory_used/(1024*1024)) +  "\t" + forceStop);
 				
 			}
 			else {
-				writer.write(queries.peek().get_source() + " " + queries.peek().get_destination() + " " + queries.peek().get_start_departure_time()
-						+ " " + queries.peek().get_budget() + " " + 0 + " " + 0 + " " + (end - start) / 1000F +
-						"\t" + (memory_used/(1024*1024)) /*+  " " + solver.getNLabels()*/ + "\n");
-				writer.flush();
-				//System.out.println("Timeout!!");
+				System.out.println(queries.peek().get_source() + "\t" + queries.peek().get_destination() + "\t" + queries.peek().get_start_departure_time()
+						+ "\t" + Graph.get_node(queries.peek().get_destination()).get_forward_hScore() + "\t" + 0 + "\t" + 0 + "\t" + (end - start) / 1000F +
+						"\t" + (memory_used/(1024*1024)) +  "\t" + forceStop);
 			}
 //				writer2.close();
 //				fanalysis.close();
 //				writer3.close();
 //				fpath.close();
+			Graph.reset();
+			//clearSubgraph();
+			
+			queries.poll();
 		}
 //			if(!optimization)
 //				optimization = true;
 //			
-		Graph.reset();
-		//clearSubgraph();
 		
-		queries.poll();
 			
 		writer.close();
 		fout.close();

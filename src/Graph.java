@@ -73,17 +73,17 @@ public class Graph {
 	
 	public static void forwardAstar(int source, int destination, double budget){
 
-		Map<Integer,Double> hScore = new HashMap<Integer, Double>();
+		//Map<Integer,Double> hScore = new HashMap<Integer, Double>();
 		Map<Integer, Double> gScore = new HashMap<Integer, Double>();
 		
 		PriorityQueue<Integer> pQueue = new PriorityQueue<Integer>(get_vertex_count(), new Comparator<Integer>(){
 			@Override
         	public int compare(Integer i, Integer j){
 				
-                if(hScore.get(i) < hScore.get(j)){
+                if(gScore.get(i) > gScore.get(j)){
                     return 1;
                 }
-                else if (hScore.get(i) > hScore.get(j)){
+                else if (gScore.get(i) < gScore.get(j)){
                     return -1;
                 }
                 return 0;
@@ -93,43 +93,45 @@ public class Graph {
 		
 		pQueue.add(source);
 		gScore.put(source, 0.0);
-		hScore.put(source, get_node(source).euclidean_distance(get_node(destination))/BidirectionalAstar.MAX_SPEED);
+		//hScore.put(source, get_node(source).euclidean_distance(get_node(destination))/BidirectionalAstar.MAX_SPEED);
 		get_node(source).setForwardReachebility();
 		//Main.updateSubgraph(destination);
 		
 		while(!pQueue.isEmpty()) {
 
-			int current_vertex = pQueue.peek();
+			int current_vertex = pQueue.poll();
+			
 			Node node = get_node(current_vertex);
 			double current_cost = gScore.get(current_vertex);
 			
 			Map<Integer, Edge> temp_outgoing_edge = node.get_outgoing_edges();
 			
-			for(Entry<Integer, Edge> entry : temp_outgoing_edge.entrySet()) {
+ 			for(Entry<Integer, Edge> entry : temp_outgoing_edge.entrySet()) {
 				
 				Edge edge = entry.getValue();
 				int j = edge.get_destination();
 				double cost_j = edge.getLowestCost();
 				double g_score = current_cost + cost_j;
-				double f_score = get_node(j).euclidean_distance(get_node(destination))/BidirectionalAstar.MAX_SPEED;
+				//double f_score = get_node(j).euclidean_distance(get_node(destination))/BidirectionalAstar.MAX_SPEED;
 				
-				if(g_score+f_score <= budget) {
-					if(!hScore.containsKey(j)) {
+				if(g_score <= budget) {
+					if(!gScore.containsKey(j)) {
 						get_node(j).setForwardReachebility();
 						gScore.put(j, g_score);
-						hScore.put(j, g_score+f_score);
-						if(j!=destination) pQueue.add(j);
+						//gScore.put(j, g_score+f_score);
+						if(j!=destination) 
+							pQueue.add(j);
 					}
 					
 					else if(gScore.get(j)>g_score) {
 						gScore.replace(j, g_score);
-						hScore.replace(j, g_score+f_score);
+						//hScore.replace(j, g_score+f_score);
 						
 					}
 				}
 			}
 			
-			pQueue.poll();
+			//pQueue.poll();
 		}
 		
 		for(Entry<Integer,Double> entry: gScore.entrySet()) {
@@ -147,10 +149,10 @@ public class Graph {
 			@Override
         	public int compare(Integer i, Integer j){
 				
-                if(hScore.get(i) < hScore.get(j)){
+                if(hScore.get(i) > hScore.get(j)){
                     return 1;
                 }
-                else if (hScore.get(i) > hScore.get(j)){
+                else if (hScore.get(i) < hScore.get(j)){
                     return -1;
                 }
                 return 0;
@@ -158,7 +160,8 @@ public class Graph {
 		});
 
 		
-		if(get_node(destination).isForwardReacheble())pQueue.add(destination);
+		if(get_node(destination).isForwardReacheble())
+			pQueue.add(destination);
 		gScore.put(destination, 0.0);
 		hScore.put(destination, get_node(destination).get_forward_hScore());
 		get_node(destination).setBackwardReachebility();
@@ -166,7 +169,7 @@ public class Graph {
 		
 		while(!pQueue.isEmpty()) {
 
-			int current_vertex = pQueue.peek();
+			int current_vertex = pQueue.poll();
 			Node node = get_node(current_vertex);
 			double current_cost = gScore.get(current_vertex);
 			
@@ -198,8 +201,7 @@ public class Graph {
 					}
 				}
 			}
-			
-			pQueue.poll();
+		
 		}
 		
 		for(Entry<Integer,Double> entry: gScore.entrySet()) {

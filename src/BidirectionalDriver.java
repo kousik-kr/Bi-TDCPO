@@ -1,5 +1,6 @@
 //import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -27,14 +28,38 @@ public class BidirectionalDriver {
         ConcurrentHashMap<Integer, List<Label>> backwardVisited = new ConcurrentHashMap<>();
         Set<Integer> intersectionNodes = ConcurrentHashMap.newKeySet();
 
+        public void addForwardLabel(int nodeId, Label label) {
+            forwardVisited
+                .computeIfAbsent(nodeId, k -> Collections.synchronizedList(new ArrayList<>()))
+                .add(label);
+        }
+
+        public void addBackwardLabel(int nodeId, Label label) {
+            backwardVisited
+                .computeIfAbsent(nodeId, k -> Collections.synchronizedList(new ArrayList<>()))
+                .add(label);
+        }
+        
+        public void addIntersectionNode(int nodeId) {
+            intersectionNodes.add(nodeId); // Set is already concurrent
+        }
+
+        public boolean isIntersection(int nodeId) {
+            return forwardVisited.containsKey(nodeId) && backwardVisited.containsKey(nodeId);
+        }
     }
 
 	public Result driver() throws InterruptedException, ExecutionException {
 		Graph.forwardAstar(source, destination, budget);
+		
 		Graph.backwardAstar(source, destination, budget);
 
 		if(Graph.get_node(source).isFeasible()) {
 			SharedState shared = new SharedState();
+
+			shared.backwardVisited.clear();
+			shared.forwardVisited.clear();
+			shared.intersectionNodes.clear();
 			
 			List<Double> forward_time_series = new ArrayList<Double>();
 			forward_time_series.add(start_departure_time);
@@ -72,7 +97,7 @@ public class BidirectionalDriver {
 			Function backward_arrival_time = new Function(backward_arrival_break_points);
 			Function backward_score = new Function(backward_score_break_points);
 			
-			Label destinationLabel = new Label(source, backward_arrival_time, backward_score);
+			Label destinationLabel = new Label(destination, backward_arrival_time, backward_score);
 			//sourceLabel.initializeLists();
 			destinationLabel.setVisited(destination, -1);
 			BidirectionalLabeling backward_task = new BidirectionalLabeling(source, budget/2, destinationLabel, shared, false);
@@ -101,8 +126,9 @@ public class BidirectionalDriver {
 //			BackwardLabeling backwardSolver = new BackwardLabeling(source, budget, destinationLabel);
 //			Map<Integer,List<Label>> backward_labels = backwardSolver.call();
 			//Map<Integer,Result> pruned_backward_labels = pruneDomination(backward_labels);
+			Result result = formOutputLabels(shared.intersectionNodes, shared.forwardVisited, shared.backwardVisited);
 			
-			return formOutputLabels(shared.intersectionNodes, shared.forwardVisited, shared.backwardVisited);
+			return result;
 		}
 		return null;
 	}

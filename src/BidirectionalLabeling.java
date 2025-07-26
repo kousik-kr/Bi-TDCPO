@@ -6,15 +6,15 @@ import java.util.concurrent.ForkJoinTask;
 
 
 public class BidirectionalLabeling implements Runnable{
-	private int destination;
+	private int goal;
 	private Label topLabel;
 	private double budget;
 	BidirectionalDriver.SharedState shared;
 	private boolean isForward;
 	private boolean master = false;
 	
-	public BidirectionalLabeling(int dest, double b, Label label, BidirectionalDriver.SharedState shared, boolean is_forward){
-		this.destination = dest;
+	public BidirectionalLabeling(int goal, double b, Label label, BidirectionalDriver.SharedState shared, boolean is_forward){
+		this.goal = goal;
 		this.topLabel = label;
 		this.budget = b;
 		this.shared = shared;
@@ -26,13 +26,13 @@ public class BidirectionalLabeling implements Runnable{
 
 //		List<Label> destinationLabels = new ArrayList<Label>();
 		
-//		long current = System.currentTimeMillis();
-//		if((current-BidirectionalAstar.start)/1000F >BidirectionalAstar.TIME_LIMIT) {
-//			if(!IntervalCPO.isMemoryUpdated()) 
-//				IntervalCPO.updateMemory();
-//			
-//			return null;
-//		}
+		long current = System.currentTimeMillis();
+		if((current-BidirectionalAstar.start)/1000F >BidirectionalAstar.TIME_LIMIT) {
+			if(!BidirectionalAstar.isMemoryUpdated()) 
+				BidirectionalAstar.updateMemory();
+			BidirectionalAstar.forceStop=true;
+			return;
+		}
 	
 		List<ForkJoinTask<?>> labelQueue = new ArrayList<ForkJoinTask<?>>();
 		
@@ -52,7 +52,7 @@ public class BidirectionalLabeling implements Runnable{
 	//			if(j==destination) {
 	//				System.out.println("hi");
 	//			}
-				if(j!= destination && Graph.get_node(j).isFeasible() && Graph.get_node(j).get_backward_hScore()>=budget && !topLabel.getVisited(j)) {
+				if(Graph.get_node(j).isFeasible() && Graph.get_node(j).get_forward_hScore()<=budget && !topLabel.getVisited(j)) {
 					Function current_arrivaltime_function = topLabel.get_arrivalTime();//current function at node i
 					Function current_score_function = topLabel.get_score();
 					
@@ -87,7 +87,7 @@ public class BidirectionalLabeling implements Runnable{
 							if(new_arrival_time<0) {
 								System.out.println("Hi");
 							}
-							if((new_arrival_time + min_required_budget - arrival_time_breakpoint.getX())<=2*budget)	{
+							if((new_arrival_time - arrival_time_breakpoint.getX())<=budget && (new_arrival_time + min_required_budget - arrival_time_breakpoint.getX())<=2*budget)	{
 								new_score = score_breakpoint.getY() + edge.get_score(current_time);
 								BreakPoint new_score_breakpoint = new BreakPoint(score_breakpoint.getX(), new_score);
 								
@@ -101,11 +101,11 @@ public class BidirectionalLabeling implements Runnable{
 										double y2 = new_arrival_breakpoint.getY(); 
 										
 										//TODO verify all
-										double allotted_budget = 2*budget - min_required_budget; 
+										double allotted_budget = (min_required_budget>budget) ? 2*budget - min_required_budget : budget; 
 										BreakPoint boundary_breakpoint = computeBoundaryBreakpoint(x1, y1, x2, y2, allotted_budget);
 										arrival_time_breakpoints.add(boundary_breakpoint);
 										
-										double tmp_score = edge.get_score(current_arrivaltime_function.getBreakpoints().get(time_point-1).getY());
+										double tmp_score = current_score_function.getBreakpoints().get(time_point-1).getY() + edge.get_score(current_arrivaltime_function.getBreakpoints().get(time_point-1).getY());
 										BreakPoint boundary_score = new BreakPoint(boundary_breakpoint.getX(), tmp_score);
 										score_breakpoints.add(boundary_score);
 									}
@@ -133,10 +133,10 @@ public class BidirectionalLabeling implements Runnable{
 								double y2 = new_arrival_breakpoint.getY();
 								
 								//TODO verify all
-								double allotted_budget = 2*budget - min_required_budget; 
+								double allotted_budget = (min_required_budget>budget) ? 2*budget - min_required_budget : budget; 
 								BreakPoint boundary_breakpoint = computeBoundaryBreakpoint(x1, y1, x2, y2, allotted_budget);
 								arrival_time_breakpoints.add(boundary_breakpoint);
-								double tmp_score = score_breakpoints.get(score_breakpoints.size()-1).getY();
+								double tmp_score = score_breakpoints.get(score_breakpoints.size()-1).getY() + edge.get_score(boundary_breakpoint.getY());
 								BreakPoint boundary_score = new BreakPoint(boundary_breakpoint.getX(), tmp_score);
 								score_breakpoints.add(boundary_score);
 								
@@ -190,21 +190,23 @@ public class BidirectionalLabeling implements Runnable{
 						newLabel.copyLists(topLabel.getVisitedList());//, topLabel.getPredecessorList());, topLabel.getTrace()
 						newLabel.setVisited(j, current_vertex);
 						//newLabel.setPredecessor(j, current_vertex);
-						if(shared.forwardVisited.containsKey(j)) {
-							shared.forwardVisited.get(j).add(newLabel);
+//						if(shared.forwardVisited.containsKey(j)) {
+//							shared.forwardVisited.get(j).add(newLabel);
+//						}
+//						else {
+//							List<Label> label_list = new ArrayList<Label>();
+//							label_list.add(newLabel);
+							shared.addForwardLabel(j, newLabel);
+//						}
+						if(shared.isIntersection(j)) {
+							shared.addIntersectionNode(j);
 						}
-						else {
-							List<Label> label_list = new ArrayList<Label>();
-							label_list.add(newLabel);
-							shared.forwardVisited.put(j, label_list);
+						if(j!=goal) {
+							BidirectionalLabeling newthread = new BidirectionalLabeling(goal, budget, newLabel, shared, isForward);
+							ForkJoinTask<?> task = BidirectionalAstar.pool.submit(newthread);
+							labelQueue.add(task);
+							//newthread.run();
 						}
-						if(shared.backwardVisited.containsKey(j)) {
-							shared.intersectionNodes.add(j);
-						}
-						
-						BidirectionalLabeling newthread = new BidirectionalLabeling(destination, budget, newLabel, shared, isForward);
-						ForkJoinTask<?> task = BidirectionalAstar.pool.submit(newthread);
-						labelQueue.add(task);
 						//newthread.fork();
 					}
 				}
@@ -219,7 +221,7 @@ public class BidirectionalLabeling implements Runnable{
 	//			if(j==destination) {
 	//				System.out.println("hi");
 	//			}
-				if(j!= destination && Graph.get_node(j).isFeasible() && Graph.get_node(j).get_forward_hScore()>=budget && !topLabel.getVisited(j)) {
+				if(Graph.get_node(j).isFeasible() && Graph.get_node(j).get_backward_hScore()<=budget && !topLabel.getVisited(j)) {
 					Function current_arrivaltime_function = topLabel.get_arrivalTime();//current function at node i
 					Function current_score_function = topLabel.get_score();
 					
@@ -254,7 +256,7 @@ public class BidirectionalLabeling implements Runnable{
 							if(new_departure_time<0) {
 								System.out.println("Hi");
 							}
-							if((arrival_time_breakpoint.getY() + min_required_budget - new_departure_time)<=2*budget)	{
+							if((current_time - new_departure_time)<=budget && (current_time + min_required_budget - new_departure_time)<=2*budget)	{
 								new_score = score_breakpoint.getY() + edge.get_score(new_departure_time);
 								BreakPoint new_score_breakpoint = new BreakPoint(new_departure_time, new_score);
 								
@@ -268,11 +270,11 @@ public class BidirectionalLabeling implements Runnable{
 										double y2 = new_arrival_breakpoint.getY(); 
 										
 										//TODO verify all
-										double allotted_budget = 2*budget - min_required_budget; 
+										double allotted_budget =  (min_required_budget>budget) ? 2*budget - min_required_budget : budget; 
 										BreakPoint boundary_breakpoint = computeBoundaryBreakpoint(x1, y1, x2, y2, allotted_budget);
 										arrival_time_breakpoints.add(boundary_breakpoint);
 										
-										double tmp_score = edge.get_score(current_arrivaltime_function.getBreakpoints().get(time_point-1).getY());
+										double tmp_score = current_score_function.getBreakpoints().get(time_point-1).getY() + edge.get_score(boundary_breakpoint.getX());
 										BreakPoint boundary_score = new BreakPoint(boundary_breakpoint.getX(), tmp_score);
 										score_breakpoints.add(boundary_score);
 									}
@@ -300,10 +302,10 @@ public class BidirectionalLabeling implements Runnable{
 								double y2 = new_arrival_breakpoint.getY();
 								
 								//TODO verify all
-								double allotted_budget = 2*budget - min_required_budget; 
+								double allotted_budget = (min_required_budget>budget) ? 2*budget - min_required_budget : budget; 
 								BreakPoint boundary_breakpoint = computeBoundaryBreakpoint(x1, y1, x2, y2, allotted_budget);
 								arrival_time_breakpoints.add(boundary_breakpoint);
-								double tmp_score = score_breakpoints.get(score_breakpoints.size()-1).getY();
+								double tmp_score = score_breakpoints.get(score_breakpoints.size()-1).getY() + edge.get_score(boundary_breakpoint.getX());
 								BreakPoint boundary_score = new BreakPoint(boundary_breakpoint.getX(), tmp_score);
 								score_breakpoints.add(boundary_score);
 								
@@ -357,21 +359,23 @@ public class BidirectionalLabeling implements Runnable{
 						newLabel.copyLists(topLabel.getVisitedList());//, topLabel.getPredecessorList());, topLabel.getTrace()
 						newLabel.setVisited(j, current_vertex);
 						//newLabel.setPredecessor(j, current_vertex);
-						if(shared.backwardVisited.containsKey(j)) {
-							shared.backwardVisited.get(j).add(newLabel);
+//						if(shared.backwardVisited.containsKey(j)) {
+//							shared.backwardVisited.get(j).add(newLabel);
+//						}
+//						else {
+//							List<Label> label_list = new ArrayList<Label>();
+//							label_list.add(newLabel);
+							shared.addBackwardLabel(j, newLabel);
+						//}
+						if(shared.isIntersection(j)) {
+							shared.addIntersectionNode(j);
 						}
-						else {
-							List<Label> label_list = new ArrayList<Label>();
-							label_list.add(newLabel);
-							shared.backwardVisited.put(j, label_list);
+						if(j!= goal) {
+							BidirectionalLabeling newthread = new BidirectionalLabeling(goal, budget, newLabel, shared, isForward);
+							ForkJoinTask<?> task = BidirectionalAstar.pool.submit(newthread);
+							labelQueue.add(task);
+							//newthread.run();
 						}
-						if(shared.forwardVisited.containsKey(j)) {
-							shared.intersectionNodes.add(j);
-						}
-						
-						BidirectionalLabeling newthread = new BidirectionalLabeling(destination, budget, newLabel, shared, isForward);
-						ForkJoinTask<?> task = BidirectionalAstar.pool.submit(newthread);
-						labelQueue.add(task);
 						//newthread.fork();
 					}
 				}
@@ -388,10 +392,10 @@ public class BidirectionalLabeling implements Runnable{
 				task.join();//x.get();
 				
 			}	
-			if(master) {
-				if(!BidirectionalAstar.isMemoryUpdated()) 
-					BidirectionalAstar.updateMemory();
-			}
+//			if(master) {
+//				if(!BidirectionalAstar.isMemoryUpdated()) 
+//					BidirectionalAstar.updateMemory();
+//			}
 			//nodeWiselabels.clear();
 			labelQueue.clear();
 		}
@@ -429,44 +433,45 @@ public class BidirectionalLabeling implements Runnable{
 	        // Merge the lists while both have elements
 	        while (i < arrival_time_breakpoints.size() && j < time_series.size()) {
 	            if (arrival_time_breakpoints.get(i).getY() <= time_series.get(j)) {
-	            	if(tmp_arrival_time_breakpoints.size()>0 && arrival_time_breakpoints.get(i).getX()-tmp_arrival_time_breakpoints.get(tmp_arrival_time_breakpoints.size()-1).getX()<BidirectionalAstar.THRESHOLD) {
-	            		if(score_breakpoints.get(i).getY()>tmp_score_breakpoints.get(tmp_score_breakpoints.size()-1).getY())
-	            			tmp_score_breakpoints.get(tmp_score_breakpoints.size()-1).updateY(score_breakpoints.get(i).getY());
-	            	}else {
-		            	tmp_arrival_time_breakpoints.add(arrival_time_breakpoints.get(i));
-		            	tmp_score_breakpoints.add(score_breakpoints.get(i));
-	            	}
+		            	if(tmp_arrival_time_breakpoints.size()>0 && arrival_time_breakpoints.get(i).getX()-tmp_arrival_time_breakpoints.get(tmp_arrival_time_breakpoints.size()-1).getX()<BidirectionalAstar.THRESHOLD) {
+		            		if(score_breakpoints.get(i).getY()>tmp_score_breakpoints.get(tmp_score_breakpoints.size()-1).getY())
+		            			tmp_score_breakpoints.get(tmp_score_breakpoints.size()-1).updateY(score_breakpoints.get(i).getY());
+		            	}else {
+			            	tmp_arrival_time_breakpoints.add(arrival_time_breakpoints.get(i));
+			            	tmp_score_breakpoints.add(score_breakpoints.get(i));
+		            	}
 	
 	                i++;
-	            } else {
-	            	int current_vertex = topLabel.get_nodeID();
-	            	int tmp_next_vertex = next_vertex;
-	            	
-	            	double dep_time = Graph.get_node(tmp_next_vertex).get_incoming_edges().get(current_vertex).get_departure_time(time_series.get(j));
-	            	int score = 0;
-	            	Map<Integer, Integer> predList = topLabel.getVisitedList();
-	            	
-	            	while(predList.get(current_vertex)!=-1) {
-	            		tmp_next_vertex = current_vertex;
-	            		current_vertex = predList.get(tmp_next_vertex);
-	            		dep_time = Graph.get_node(tmp_next_vertex).get_incoming_edges().get(current_vertex).get_departure_time(dep_time);
-	            		score += Graph.get_node(tmp_next_vertex).get_incoming_edges().get(current_vertex).get_score(dep_time);
-	            	}
-	            	
-	            	if(dep_time - arrival_time_breakpoints.get(i).getX()<BidirectionalAstar.THRESHOLD) {
-	            		if(score>score_breakpoints.get(i).getY())
-	            			tmp_score_breakpoints.get(tmp_score_breakpoints.size()-1).updateY(score);
-	            	}
-	            	else {
-		            	BreakPoint new_arrival_time_breakpoint = new BreakPoint(dep_time, time_series.get(j));
-		            	if(dep_time<0) {
-		            		System.out.println("Hi");
-		            	}
-		            	BreakPoint new_score_breakpoint = new BreakPoint(dep_time, score);
+	            } 
+	            else {
+		            	int current_vertex = topLabel.get_nodeID();
+		            	int tmp_next_vertex = next_vertex;
 		            	
-		            	tmp_arrival_time_breakpoints.add(new_arrival_time_breakpoint);
-		            	tmp_score_breakpoints.add(new_score_breakpoint);
-	            	}
+		            	double dep_time = Graph.get_node(tmp_next_vertex).get_incoming_edges().get(current_vertex).get_departure_time(time_series.get(j));
+		            	int score = 0;
+		            	Map<Integer, Integer> predList = topLabel.getVisitedList();
+		            	
+		            	while(predList.get(current_vertex)!=-1) {
+		            		tmp_next_vertex = current_vertex;
+		            		current_vertex = predList.get(tmp_next_vertex);
+		            		dep_time = Graph.get_node(tmp_next_vertex).get_incoming_edges().get(current_vertex).get_departure_time(dep_time);
+		            		score += Graph.get_node(tmp_next_vertex).get_incoming_edges().get(current_vertex).get_score(dep_time);
+		            	}
+		            	
+		            	if(dep_time - arrival_time_breakpoints.get(i).getX()<BidirectionalAstar.THRESHOLD) {
+		            		if(score>score_breakpoints.get(i).getY())
+		            			tmp_score_breakpoints.get(tmp_score_breakpoints.size()-1).updateY(score);
+		            	}
+		            	else {
+			            	BreakPoint new_arrival_time_breakpoint = new BreakPoint(dep_time, time_series.get(j));
+			            	if(dep_time<0) {
+			            		System.out.println("Hi");
+			            	}
+			            	BreakPoint new_score_breakpoint = new BreakPoint(dep_time, score);
+			            	
+			            	tmp_arrival_time_breakpoints.add(new_arrival_time_breakpoint);
+			            	tmp_score_breakpoints.add(new_score_breakpoint);
+		            	}
 	                j++;
 	            }
 	        }
@@ -494,45 +499,50 @@ public class BidirectionalLabeling implements Runnable{
 
 	        // Merge the lists while both have elements
 	        while (i < arrival_time_breakpoints.size() && j < time_series.size()) {
-	            if (arrival_time_breakpoints.get(i).getY() <= time_series.get(j)) {
-	            	if(tmp_arrival_time_breakpoints.size()>0 && arrival_time_breakpoints.get(i).getX()-tmp_arrival_time_breakpoints.get(tmp_arrival_time_breakpoints.size()-1).getX()<BidirectionalAstar.THRESHOLD) {
-	            		if(score_breakpoints.get(i).getY()>tmp_score_breakpoints.get(tmp_score_breakpoints.size()-1).getY())
-	            			tmp_score_breakpoints.get(tmp_score_breakpoints.size()-1).updateY(score_breakpoints.get(i).getY());
-	            	}else {
-		            	tmp_arrival_time_breakpoints.add(arrival_time_breakpoints.get(i));
-		            	tmp_score_breakpoints.add(score_breakpoints.get(i));
-	            	}
+	            if (arrival_time_breakpoints.get(i).getX() <= time_series.get(j)) {
+		            	if(tmp_arrival_time_breakpoints.size()>0 && arrival_time_breakpoints.get(i).getY()-
+		            			tmp_arrival_time_breakpoints.get(tmp_arrival_time_breakpoints.size()-1).getY()<BidirectionalAstar.THRESHOLD) {
+		            		if(score_breakpoints.get(i).getY()>tmp_score_breakpoints.get(tmp_score_breakpoints.size()-1).getY())
+		            			tmp_score_breakpoints.get(tmp_score_breakpoints.size()-1).updateY(score_breakpoints.get(i).getY());
+		            	}else {
+			            	tmp_arrival_time_breakpoints.add(arrival_time_breakpoints.get(i));
+			            	tmp_score_breakpoints.add(score_breakpoints.get(i));
+		            	}
 
 	                i++;
-	            } else {
-	            	int current_vertex = topLabel.get_nodeID();
-	            	int tmp_next_vertex = next_vertex;
-	            	
-	            	double dep_time = Graph.get_node(tmp_next_vertex).get_incoming_edges().get(current_vertex).get_departure_time(time_series.get(j));
-	            	int score = 0;
-	            	Map<Integer, Integer> predList = topLabel.getVisitedList();
-	            	
-	            	while(predList.get(current_vertex)!=-1) {
-	            		tmp_next_vertex = current_vertex;
-	            		current_vertex = predList.get(tmp_next_vertex);
-	            		dep_time = Graph.get_node(tmp_next_vertex).get_incoming_edges().get(current_vertex).get_departure_time(dep_time);
-	            		score += Graph.get_node(tmp_next_vertex).get_incoming_edges().get(current_vertex).get_score(dep_time);
-	            	}
-	            	
-	            	if(dep_time - arrival_time_breakpoints.get(i).getX()<BidirectionalAstar.THRESHOLD) {
-	            		if(score>score_breakpoints.get(i).getY())
-	            			tmp_score_breakpoints.get(tmp_score_breakpoints.size()-1).updateY(score);
-	            	}
-	            	else {
-		            	BreakPoint new_arrival_time_breakpoint = new BreakPoint(dep_time, time_series.get(j));
-		            	if(dep_time<0) {
-		            		System.out.println("Hi");
-		            	}
-		            	BreakPoint new_score_breakpoint = new BreakPoint(dep_time, score);
+	            } 
+	            else {
+		            	int current_vertex = topLabel.get_nodeID();
+		            	int tmp_next_vertex = next_vertex;
 		            	
-		            	tmp_arrival_time_breakpoints.add(new_arrival_time_breakpoint);
-		            	tmp_score_breakpoints.add(new_score_breakpoint);
-	            	}
+		            	double arr_time = Graph.get_node(tmp_next_vertex).get_outgoing_edges().get(current_vertex).get_arrival_time(time_series.get(j));
+		            	int score = 0;
+		            	Map<Integer, Integer> successorList = topLabel.getVisitedList();
+		            	
+		            	if(successorList.get(current_vertex)==null)
+		            		
+		            		
+		            	while(successorList.get(current_vertex)!=-1) {
+		            		tmp_next_vertex = current_vertex;
+		            		current_vertex = successorList.get(tmp_next_vertex);
+		            		score += Graph.get_node(tmp_next_vertex).get_outgoing_edges().get(current_vertex).get_score(arr_time);
+		            		arr_time = Graph.get_node(tmp_next_vertex).get_outgoing_edges().get(current_vertex).get_arrival_time(arr_time);
+		            	}
+		            	
+		            	if(arr_time - arrival_time_breakpoints.get(i).getY()<BidirectionalAstar.THRESHOLD) {
+		            		if(score>score_breakpoints.get(i).getY())
+		            			tmp_score_breakpoints.get(tmp_score_breakpoints.size()-1).updateY(score);
+		            	}
+		            	else {
+			            	BreakPoint new_arrival_time_breakpoint = new BreakPoint(time_series.get(j), arr_time);
+			            	if(arr_time<0) {
+			            		System.out.println("Hi");
+			            	}
+			            	BreakPoint new_score_breakpoint = new BreakPoint(time_series.get(j), score);
+			            	
+			            	tmp_arrival_time_breakpoints.add(new_arrival_time_breakpoint);
+			            	tmp_score_breakpoints.add(new_score_breakpoint);
+		            	}
 	                j++;
 	            }
 	        }
