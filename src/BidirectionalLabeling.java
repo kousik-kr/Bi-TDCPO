@@ -58,6 +58,7 @@ public class BidirectionalLabeling implements Runnable{
 					
 					List<BreakPoint> arrival_time_breakpoints = new ArrayList<BreakPoint>();//to store the breakpoints at node j
 					List<BreakPoint> score_breakpoints = new ArrayList<BreakPoint>();
+					double max_score = 0;
 					
 					Function arrivalTime = null;//function to form label at j
 					Function score = null; 
@@ -108,6 +109,9 @@ public class BidirectionalLabeling implements Runnable{
 										double tmp_score = current_score_function.getBreakpoints().get(time_point-1).getY() + edge.get_score(current_arrivaltime_function.getBreakpoints().get(time_point-1).getY());
 										BreakPoint boundary_score = new BreakPoint(boundary_breakpoint.getX(), tmp_score);
 										score_breakpoints.add(boundary_score);
+										
+										if(boundary_score.getY()>max_score)
+											max_score = boundary_score.getY();
 									}
 									else {
 										is_first = false;
@@ -117,6 +121,8 @@ public class BidirectionalLabeling implements Runnable{
 								arrival_time_breakpoints.add(new_arrival_breakpoint);
 								score_breakpoints.add(new_score_breakpoint);
 								
+								if(new_score_breakpoint.getY()>max_score)
+									max_score = new_score_breakpoint.getY();
 								
 							}
 							else if(is_first || !previous_status) {
@@ -140,42 +146,50 @@ public class BidirectionalLabeling implements Runnable{
 								BreakPoint boundary_score = new BreakPoint(boundary_breakpoint.getX(), tmp_score);
 								score_breakpoints.add(boundary_score);
 								
+								if(boundary_score.getY()>max_score)
+									max_score = boundary_score.getY();
 								
-								computeAndUpdateBreakpoints(arrival_time_breakpoints, score_breakpoints, j);
+								computeAndUpdateBreakpoints(arrival_time_breakpoints, score_breakpoints, j, max_score);
 								if(arrivalTime==null) {
-									arrivalTime = new Function(arrival_time_breakpoints);
-									score = new Function(score_breakpoints);
+									arrivalTime = new Function(arrival_time_breakpoints, -1);
+									score = new Function(score_breakpoints, max_score);
 									currentArrivalTime = arrivalTime;
 									currentScore = score;
 								}
 								else {
-									Function newArrivalTime = new Function(arrival_time_breakpoints);
-									Function newScore = new Function(score_breakpoints);
+									Function newArrivalTime = new Function(arrival_time_breakpoints, -1);
+									Function newScore = new Function(score_breakpoints, max_score);
 									currentArrivalTime.setNextFunction(newArrivalTime);
 									currentScore.setNextFunction(newScore);
+									arrivalTime.updateScore(max_score);
+									
 									currentArrivalTime = newArrivalTime;
 									currentScore = newScore;
 								}
 								arrival_time_breakpoints.clear();
 								score_breakpoints.clear();
+								max_score=0;
 							}
 		
 						}
 					//if((!IntervalCPO.optimization && arrival_time_breakpoints.size()>1) || (IntervalCPO.optimization && arrival_time_breakpoints.size()==topLabel.get_arrivalTime().getBreakpoints().size())) {
 						if(arrival_time_breakpoints.size()>0) {	
-							computeAndUpdateBreakpoints(arrival_time_breakpoints, score_breakpoints, j);
+							computeAndUpdateBreakpoints(arrival_time_breakpoints, score_breakpoints, j, max_score);
 							
 							if(arrivalTime==null) {
-								arrivalTime = new Function(arrival_time_breakpoints);
-								score = new Function(score_breakpoints);
+								arrivalTime = new Function(arrival_time_breakpoints, -1);
+								score = new Function(score_breakpoints, max_score);
 								currentArrivalTime = arrivalTime;
 								currentScore = score;
 							}
 							else {
-								Function newArrivalTime = new Function(arrival_time_breakpoints);
-								Function newScore = new Function(score_breakpoints);
+								Function newArrivalTime = new Function(arrival_time_breakpoints, -1);
+								Function newScore = new Function(score_breakpoints, max_score);
 								currentArrivalTime.setNextFunction(newArrivalTime);
 								currentScore.setNextFunction(newScore);
+								
+								arrivalTime.updateScore(max_score);
+								
 								currentArrivalTime = newArrivalTime;
 								currentScore = newScore;
 							}
@@ -227,6 +241,7 @@ public class BidirectionalLabeling implements Runnable{
 					
 					List<BreakPoint> arrival_time_breakpoints = new ArrayList<BreakPoint>();//to store the breakpoints at node j
 					List<BreakPoint> score_breakpoints = new ArrayList<BreakPoint>();
+					double max_score =0;
 					
 					Function arrivalTime = null;//function to form label at j
 					Function score = null; 
@@ -245,18 +260,18 @@ public class BidirectionalLabeling implements Runnable{
 							BreakPoint arrival_time_breakpoint = current_arrivaltime_function.getBreakpoints().get(time_point);
 							BreakPoint score_breakpoint = current_score_function.getBreakpoints().get(time_point);
 							
-							double current_time = arrival_time_breakpoint.getY();
+							double current_time = arrival_time_breakpoint.getX();
 							double new_departure_time = edge.get_departure_time(current_time);
 							double new_score;
 							
 							//to reach j to d
 							double min_required_budget = Graph.get_node(j).get_forward_hScore();
 							//new breakpoints at node j
-							BreakPoint new_arrival_breakpoint = new BreakPoint(new_departure_time, current_time);
+							BreakPoint new_arrival_breakpoint = new BreakPoint(new_departure_time, arrival_time_breakpoint.getY());
 							if(new_departure_time<0) {
 								System.out.println("Hi");
 							}
-							if((current_time - new_departure_time)<=budget && (current_time + min_required_budget - new_departure_time)<=2*budget)	{
+							if((arrival_time_breakpoint.getY() - new_departure_time)<=budget && (arrival_time_breakpoint.getY() + min_required_budget - new_departure_time)<=2*budget)	{
 								new_score = score_breakpoint.getY() + edge.get_score(new_departure_time);
 								BreakPoint new_score_breakpoint = new BreakPoint(new_departure_time, new_score);
 								
@@ -277,6 +292,10 @@ public class BidirectionalLabeling implements Runnable{
 										double tmp_score = current_score_function.getBreakpoints().get(time_point-1).getY() + edge.get_score(boundary_breakpoint.getX());
 										BreakPoint boundary_score = new BreakPoint(boundary_breakpoint.getX(), tmp_score);
 										score_breakpoints.add(boundary_score);
+										
+										if(boundary_score.getY()>max_score)
+											max_score = boundary_score.getY();
+										
 									}
 									else {
 										is_first = false;
@@ -285,6 +304,10 @@ public class BidirectionalLabeling implements Runnable{
 								
 								arrival_time_breakpoints.add(new_arrival_breakpoint);
 								score_breakpoints.add(new_score_breakpoint);
+								
+								if(new_score_breakpoint.getY()>max_score)
+									max_score = new_score_breakpoint.getY();
+								
 								
 								
 							}
@@ -309,42 +332,50 @@ public class BidirectionalLabeling implements Runnable{
 								BreakPoint boundary_score = new BreakPoint(boundary_breakpoint.getX(), tmp_score);
 								score_breakpoints.add(boundary_score);
 								
+								if(boundary_score.getY()>max_score)
+									max_score = boundary_score.getY();
 								
-								computeAndUpdateBreakpoints(arrival_time_breakpoints, score_breakpoints, j);
+								
+								computeAndUpdateBreakpoints(arrival_time_breakpoints, score_breakpoints, j, max_score);
 								if(arrivalTime==null) {
-									arrivalTime = new Function(arrival_time_breakpoints);
-									score = new Function(score_breakpoints);
+									arrivalTime = new Function(arrival_time_breakpoints, -1);
+									score = new Function(score_breakpoints, max_score);
 									currentArrivalTime = arrivalTime;
 									currentScore = score;
 								}
 								else {
-									Function newArrivalTime = new Function(arrival_time_breakpoints);
-									Function newScore = new Function(score_breakpoints);
+									Function newArrivalTime = new Function(arrival_time_breakpoints, -1);
+									Function newScore = new Function(score_breakpoints, max_score);
 									currentArrivalTime.setNextFunction(newArrivalTime);
 									currentScore.setNextFunction(newScore);
+									arrivalTime.updateScore(max_score);
 									currentArrivalTime = newArrivalTime;
 									currentScore = newScore;
 								}
 								arrival_time_breakpoints.clear();
 								score_breakpoints.clear();
+								max_score=0;
 							}
 		
 						}
 					//if((!IntervalCPO.optimization && arrival_time_breakpoints.size()>1) || (IntervalCPO.optimization && arrival_time_breakpoints.size()==topLabel.get_arrivalTime().getBreakpoints().size())) {
 						if(arrival_time_breakpoints.size()>0) {	
-							computeAndUpdateBreakpoints(arrival_time_breakpoints, score_breakpoints, j);
+							computeAndUpdateBreakpoints(arrival_time_breakpoints, score_breakpoints, j, max_score);
 							
 							if(arrivalTime==null) {
-								arrivalTime = new Function(arrival_time_breakpoints);
-								score = new Function(score_breakpoints);
+								arrivalTime = new Function(arrival_time_breakpoints, -1);
+								score = new Function(score_breakpoints, max_score);
 								currentArrivalTime = arrivalTime;
 								currentScore = score;
 							}
 							else {
-								Function newArrivalTime = new Function(arrival_time_breakpoints);
-								Function newScore = new Function(score_breakpoints);
+								Function newArrivalTime = new Function(arrival_time_breakpoints, -1);
+								Function newScore = new Function(score_breakpoints, max_score);
 								currentArrivalTime.setNextFunction(newArrivalTime);
 								currentScore.setNextFunction(newScore);
+								arrivalTime.updateScore(max_score);
+								arrivalTime.updateScore(max_score);
+								
 								currentArrivalTime = newArrivalTime;
 								currentScore = newScore;
 							}
@@ -420,7 +451,7 @@ public class BidirectionalLabeling implements Runnable{
 //	}
 
 	private void computeAndUpdateBreakpoints(List<BreakPoint> arrival_time_breakpoints,
-			List<BreakPoint> score_breakpoints, int next_vertex) {
+			List<BreakPoint> score_breakpoints, int next_vertex, double max_score) {
 		if(isForward) {
 			List<Double> time_series = Graph.getTimeSeries(arrival_time_breakpoints.get(0).getY(), 
 					arrival_time_breakpoints.get(arrival_time_breakpoints.size()-1).getY());

@@ -5,6 +5,7 @@ public class Label{
 	private Function arrival_time;
 	private Function score;
 	private HashMap<Integer, Integer> visitedList;
+	private double maxScore;
 	//private List<Integer> trace;
 	//private int [] predecessorList;
 	
@@ -13,8 +14,13 @@ public class Label{
 		this.arrival_time = arrival;
 		this.score = score;
 		this.visitedList = new HashMap<Integer, Integer>();
+		this.maxScore = score.getMaxScore();
 		//this.trace = new ArrayList<Integer>();
 		//this.predecessorList = new int[Main.subgraphSize];
+	}
+	
+	public double getMaxScore() {
+		return this.maxScore;
 	}
 	
 	public double get_arrivalTime(int departure_time) {

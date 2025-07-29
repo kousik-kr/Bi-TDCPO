@@ -1,8 +1,13 @@
 //import java.io.IOException;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -41,7 +46,7 @@ public class BidirectionalDriver {
         }
         
         public void addIntersectionNode(int nodeId) {
-            intersectionNodes.add(nodeId); // Set is already concurrent
+            intersectionNodes.add(nodeId);
         }
 
         public boolean isIntersection(int nodeId) {
@@ -72,8 +77,8 @@ public class BidirectionalDriver {
 			List<BreakPoint> forward_arrival_break_points = createArrivalBreakpoints(forward_time_series);
 			List<BreakPoint> forward_score_break_points = createScoreBreakpoints(forward_time_series);
 			
-			Function forward_arrival_time = new Function(forward_arrival_break_points);
-			Function forward_score = new Function(forward_score_break_points);
+			Function forward_arrival_time = new Function(forward_arrival_break_points, -1);
+			Function forward_score = new Function(forward_score_break_points, 0);
 			
 			Label sourceLabel = new Label(source, forward_arrival_time, forward_score);
 			//sourceLabel.initializeLists();
@@ -94,8 +99,8 @@ public class BidirectionalDriver {
 			List<BreakPoint> backward_arrival_break_points = createArrivalBreakpoints(backward_time_series);
 			List<BreakPoint> backward_score_break_points = createScoreBreakpoints(backward_time_series);
 			
-			Function backward_arrival_time = new Function(backward_arrival_break_points);
-			Function backward_score = new Function(backward_score_break_points);
+			Function backward_arrival_time = new Function(backward_arrival_break_points, -1);
+			Function backward_score = new Function(backward_score_break_points, 0);
 			
 			Label destinationLabel = new Label(destination, backward_arrival_time, backward_score);
 			//sourceLabel.initializeLists();
@@ -120,7 +125,7 @@ public class BidirectionalDriver {
 //			ForwardLabeling forwardSolver = new ForwardLabeling(destination, budget, sourceLabel);
 //			Map<Integer,List<Label>> forward_labels = forwardSolver.call();
 //			forwardSolver.setMaster(); 
-//			Map<Integer,Result> pruned_forward_labels = pruneDomination(forward_labels);
+			//Map<Integer,Result> pruned_forward_labels = pruneDomination(forward_labels);
 			
 			
 //			BackwardLabeling backwardSolver = new BackwardLabeling(source, budget, destinationLabel);
@@ -133,28 +138,176 @@ public class BidirectionalDriver {
 		return null;
 	}
 
-	private Result formOutputLabels(Set<Integer> intersectionNodes, Map<Integer, List<Label>> forward_labels, Map<Integer, List<Label>> backward_labels) {
+	private Result formOutputLabels1(Set<Integer> intersectionNodes, Map<Integer, List<Label>> forward_labels, Map<Integer, List<Label>> backward_labels) {
 		Result finalResult = null;
 		
 		for(int current_join_node:intersectionNodes) {
 			List<Label> current_backward_labels = backward_labels.get(current_join_node);
-			
+			List<Label> current_forward_labels = forward_labels.get(current_join_node);
+			//printLabel(current_join_node, current_forward_labels, current_backward_labels);
+			System.out.println("Node: " + current_join_node + ", Forward: " + current_forward_labels.size() + ", Backward: " + current_backward_labels.size() + ", Total: " + (long)current_forward_labels.size()*(long)current_backward_labels.size());
+			long i=0;
 			for(Label current_backward_label:current_backward_labels) {
-				List<Label> current_forward_labels = forward_labels.get(current_join_node);
-				
 				for(Label current_forward_label:current_forward_labels) {
-					Result current_result = getResult(current_forward_label, current_backward_label);
+					if (finalResult == null) {
+						Result currentResult = getResult(current_forward_label, current_backward_label);
+						finalResult = currentResult;
+					}
+					else if(finalResult != null && current_forward_label.getMaxScore() + current_backward_label.getMaxScore() <= finalResult.get_score()) {
+						i++;
+					}
 					
-					if(finalResult==null || finalResult.get_score()<current_result.get_score()) {
-						finalResult=current_result;
+					else if(finalResult != null && current_forward_label.getMaxScore() + current_backward_label.getMaxScore() > finalResult.get_score()) {
+						Result currentResult = getResult(current_forward_label, current_backward_label);
+					    if(currentResult.get_score()>finalResult.get_score())
+					    	finalResult = currentResult;
 					}
 					
 				}
 			}
+			System.out.println(i);
 			
 		}
 		return finalResult;
 	}
+	
+	private void printLabel(int node, List<Label> forward_labels, List<Label> backward_labels) {
+		String output_file = "Analysis_" + node + ".txt";
+		FileWriter fout = null;
+		try {
+			fout = new FileWriter(output_file);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		BufferedWriter writer = new BufferedWriter(fout);
+		try {
+			writer.write("Forward Labels:\n");
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		for(Label label:forward_labels) {
+			write(writer, label, source, node, true);
+		}
+		
+		try {
+			writer.write("\nBackward Labels:\n");
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		for(Label label:backward_labels) {
+			write(writer, label, node, destination, false);
+		}
+		try {
+			writer.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		try {
+			fout.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	private void write(BufferedWriter writer, Label label, int src, int dest, boolean isForward) {
+
+		List<Integer> path = new ArrayList<Integer>();
+		int current;
+		if (isForward)
+			current = dest;
+		else
+			current = src;
+		
+		while(!label.getVisitedList().get(current).equals(-1)) {
+			path.add(current);
+		   	current = label.getVisitedList().get(current);
+		}
+
+		path.add(current);
+		
+		if(isForward)
+			Collections.reverse(path);
+		
+		for(int i:path)
+			try {
+				writer.write(i+",");
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		try {
+			writer.write("\n");
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		try {
+			writer.write("[");
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		Function forward_score_function = label.get_score();
+		Function current_arrival_function = label.get_arrivalTime();
+		
+		while(forward_score_function != null) {
+			List<BreakPoint> score_breakpoints = forward_score_function.getBreakpoints();
+			List<BreakPoint> arrival_time_breakpoints = current_arrival_function.getBreakpoints();
+			for(int i =0;i<score_breakpoints.size();i++) {
+				
+				try {
+					writer.write("("+ score_breakpoints.get(i).getX()+": " + arrival_time_breakpoints.get(i).getY()+", " + score_breakpoints.get(i).getY()+"), ");
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+				
+			}
+			current_arrival_function = current_arrival_function.getNextFunction();
+			
+			forward_score_function = forward_score_function.getNextFunction();
+		}
+		try {
+			writer.write("],\n");
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+		try {
+			writer.flush();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+		
+	}
+
+	private Result formOutputLabels(Set<Integer> intersectionNodes, Map<Integer, List<Label>> forward_labels, Map<Integer, List<Label>> backward_labels) {
+
+		return intersectionNodes.parallelStream().map(current_join_node -> {
+			List<Label> current_backward_labels = backward_labels.get(current_join_node);
+			List<Label> current_forward_labels = forward_labels.get(current_join_node);
+			
+//			if (current_backward_labels == null || current_forward_labels == null) 
+//				return null;
+//			
+			Result bestLocalResult = null;
+			
+			for (Label backwardLabel : current_backward_labels) {
+				for (Label forwardLabel : current_forward_labels) {
+					
+					
+					if (bestLocalResult == null) {
+						Result currentResult = getResult(forwardLabel, backwardLabel);
+					    bestLocalResult = currentResult;
+					}
+					else if(forwardLabel.getMaxScore() + backwardLabel.getMaxScore() > bestLocalResult.get_score()) {
+						Result currentResult = getResult(forwardLabel, backwardLabel);
+					    if(currentResult.get_score()>bestLocalResult.get_score())
+							bestLocalResult = currentResult;
+					}
+				}
+			}
+			return bestLocalResult;
+		}).filter(Objects::nonNull).max(Comparator.comparingDouble(Result::get_score)).orElse(null);
+	}
+
 
 	private Result getResult(Label current_forward_label, Label current_backward_label) {
 		
@@ -178,14 +331,14 @@ public class BidirectionalDriver {
 //		writer3.write("\n");
 		//writer2.write("[");
 		Function forward_score_function = current_forward_label.get_score();
-		//Function current_arrival_function = current_forward_label.get_arrivalTime();
+		Function current_arrival_function = current_forward_label.get_arrivalTime();
 		
 		while(forward_score_function != null) {
 			List<BreakPoint> score_breakpoints = forward_score_function.getBreakpoints();
-			//List<BreakPoint> arrival_time_breakpoints = current_arrival_function.getBreakpoints();
+			List<BreakPoint> arrival_time_breakpoints = current_arrival_function.getBreakpoints();
 			for(int i =0;i<score_breakpoints.size();i++) {
 				double forward_score = score_breakpoints.get(i).getY();
-				double tmp_dep_time = score_breakpoints.get(i).getX();
+				double tmp_dep_time = arrival_time_breakpoints.get(i).getY();
 				double backward_score = current_backward_label.get_score(tmp_dep_time);
 				
 				//writer2.write("("+ score_breakpoints.get(i).getX()+","+score_breakpoints.get(i).getY()+"), ");
@@ -197,6 +350,7 @@ public class BidirectionalDriver {
 			}
 			
 			forward_score_function = forward_score_function.getNextFunction();
+			current_arrival_function = current_arrival_function.getNextFunction();
 		}
 		//writer2.write("],\n");
 //			/int i= (int) start_departure_time;

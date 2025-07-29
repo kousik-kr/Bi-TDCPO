@@ -50,7 +50,7 @@ public class BidirectionalAstar {
 		int n = 264346;//Integer.parseInt(args[1]);
 		density = 20;//Integer.parseInt(args[2]);
 		overhead = 30;//Double.parseDouble(args[3]);
-		no_of_core = 24;//Integer.parseInt(args[4]);
+		no_of_core = 30;//Integer.parseInt(args[4]);
 		TIME_LIMIT = 5;//Double.parseDouble(args[5]);
 		interval_duration = 360;//Integer.parseInt(args[6]);
 		THRESHOLD = 10;//Integer.parseInt(args[7]);
