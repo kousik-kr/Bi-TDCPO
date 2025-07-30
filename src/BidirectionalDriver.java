@@ -297,7 +297,7 @@ public class BidirectionalDriver {
 						Result currentResult = getResult(forwardLabel, backwardLabel);
 					    bestLocalResult = currentResult;
 					}
-					else if(forwardLabel.getMaxScore() + backwardLabel.getMaxScore() > bestLocalResult.get_score()) {
+					else if(!BidirectionalAstar.Optimization || forwardLabel.getMaxScore() + backwardLabel.getMaxScore() > bestLocalResult.get_score()) {
 						Result currentResult = getResult(forwardLabel, backwardLabel);
 					    if(currentResult.get_score()>bestLocalResult.get_score())
 							bestLocalResult = currentResult;

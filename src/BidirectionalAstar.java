@@ -8,8 +8,16 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.PriorityQueue;
 import java.util.Queue;
+import java.util.Random;
+import java.util.Map.Entry;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ForkJoinPool;
 
@@ -39,7 +47,8 @@ public class BidirectionalAstar {
 	private static double interval_duration;
 	public static double THRESHOLD;
 	public static boolean forceStop = false;
-	
+	public static boolean Optimization;
+		
 //	private static HashMap<Integer, Integer> subgraphNodes = new HashMap<Integer, Integer>(); 
 //	private static HashMap<Integer, Integer> subgraphIndexes = new HashMap<Integer, Integer>(); 
 //	public static int subgraphSize = 0;
@@ -47,21 +56,123 @@ public class BidirectionalAstar {
 	public static void main(String[] args) throws IOException, InterruptedException, ExecutionException{
 		//currentDirectory = args[0];
 		//String s = "6105";//args[0];
-		int n = 264346;//Integer.parseInt(args[1]);
+		int n = 23947347;//Integer.parseInt(args[1]);
 		density = 20;//Integer.parseInt(args[2]);
 		overhead = 30;//Double.parseDouble(args[3]);
 		no_of_core = 30;//Integer.parseInt(args[4]);
 		TIME_LIMIT = 5;//Double.parseDouble(args[5]);
 		interval_duration = 360;//Integer.parseInt(args[6]);
 		THRESHOLD = 10;//Integer.parseInt(args[7]);
+		Optimization = true;
 		pool = new ForkJoinPool(no_of_core);
 		Graph.set_vertex_count(n);
 		extract_nodes();
 		extract_edges();
+		if(n==23947347)
+			create_query_file();
 		create_query_bucket();
 		query_processing();
 	}
 	
+	private static void create_query_file() {
+		String output_file = "Src-dest_" + Graph.get_vertex_count() + ".txt";
+		FileWriter fout = null;
+		try {
+			fout = new FileWriter(output_file);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		BufferedWriter writer = new BufferedWriter(fout);
+		Random rand = new Random();
+		int i=0;
+		while(i<1000) {
+			int source = rand.nextInt(Graph.get_vertex_count());
+			int departure_time = rand.nextInt(7*60+30, 9*60);
+			double budget = rand.nextDouble(1, 59);
+			List<Double> dest_budg = dijkstra(source, departure_time, budget);
+			int destination = (int) Math.round(dest_budg.get(0));
+			try {
+				writer.write(source + "\t" + destination + "\t" + dest_budg.get(1) + "\t" + budget + "\n");
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			
+			try {
+				writer.flush();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+			i++;
+		}
+		try {
+			fout.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		try {
+			writer.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	
+}
+
+	private static List<Double> dijkstra(int source, int departure_time, double budget) {
+		Map<Integer, Double> gScore = new HashMap<Integer, Double>();
+		
+		PriorityQueue<Integer> pQueue = new PriorityQueue<Integer>(Graph.get_vertex_count(), new Comparator<Integer>(){
+			@Override
+        	public int compare(Integer i, Integer j){
+				
+                if(gScore.get(i) > gScore.get(j)){
+                    return 1;
+                }
+                else if (gScore.get(i) < gScore.get(j)){
+                    return -1;
+                }
+                return 0;
+            }
+		});
+
+		
+		pQueue.add(source);
+		gScore.put(source, (double)departure_time);
+		
+		while(!pQueue.isEmpty()) {
+
+			int current_vertex = pQueue.poll();
+			
+			Node node = Graph.get_node(current_vertex);
+			double current_cost = gScore.get(current_vertex);
+			if(current_cost>=budget + departure_time) {
+				budget = current_cost-departure_time;
+				List<Double> list = new ArrayList<Double>();
+				list.add((double)current_vertex);
+				list.add(budget);
+				return list;
+			}
+			Map<Integer, Edge> temp_outgoing_edge = node.get_outgoing_edges();
+			
+ 			for(Entry<Integer, Edge> entry : temp_outgoing_edge.entrySet()) {
+				
+				Edge edge = entry.getValue();
+				int j = edge.get_destination();
+				double cost_j = edge.get_arrival_time(current_cost);	
+				if(!gScore.containsKey(j)) {
+					gScore.put(j, cost_j); 
+					pQueue.add(j);
+				}
+				
+				else if(gScore.get(j)>cost_j) {
+					gScore.replace(j, cost_j);
+					
+				}
+			}
+			
+		}
+		return null;
+	}
+
 	private static void create_query_bucket() throws IOException{
 		String query_file = currentDirectory + "/" + "Src-dest_" + Graph.get_vertex_count() +".txt";
 		File fin = new File(query_file);
@@ -91,7 +202,7 @@ public class BidirectionalAstar {
 	}
 
 	private static void extract_edges() throws NumberFormatException, IOException{
-		String edge_file = currentDirectory + "/" + "edges_" + Graph.get_vertex_count() + ".txt";
+		String edge_file = currentDirectory + "/" + "edges_" + Graph.get_vertex_count()+ ".txt";
 		File fin = new File(edge_file);
 		BufferedReader br = new BufferedReader(new FileReader(fin));
 		String line;
