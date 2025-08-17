@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ForkJoinTask;
+import java.util.concurrent.PriorityBlockingQueue;
 
 public class BidirectionalDriver {
 	private int source;
@@ -29,30 +30,58 @@ public class BidirectionalDriver {
 	}
 
 	static class SharedState {
-        ConcurrentHashMap<Integer, List<Label>> forwardVisited = new ConcurrentHashMap<>();
-        ConcurrentHashMap<Integer, List<Label>> backwardVisited = new ConcurrentHashMap<>();
-        Set<Integer> intersectionNodes = ConcurrentHashMap.newKeySet();
+	    private static final int MAX_LABELS_PER_NODE = 10; // keep top 10 labels per node
 
-        public void addForwardLabel(int nodeId, Label label) {
-            forwardVisited
-                .computeIfAbsent(nodeId, k -> Collections.synchronizedList(new ArrayList<>()))
-                .add(label);
-        }
+	    ConcurrentHashMap<Integer, PriorityBlockingQueue<Label>> forwardVisited = new ConcurrentHashMap<>();
+	    ConcurrentHashMap<Integer, PriorityBlockingQueue<Label>> backwardVisited = new ConcurrentHashMap<>();
+	    Set<Integer> intersectionNodes = ConcurrentHashMap.newKeySet();
 
-        public void addBackwardLabel(int nodeId, Label label) {
-            backwardVisited
-                .computeIfAbsent(nodeId, k -> Collections.synchronizedList(new ArrayList<>()))
-                .add(label);
-        }
-        
-        public void addIntersectionNode(int nodeId) {
-            intersectionNodes.add(nodeId);
-        }
+	    // Max-heap comparator based on getMaxScore()
+	    private final Comparator<Label> maxHeapComparator =
+	            Comparator.comparingDouble(Label::getMaxScore).reversed();
 
-        public boolean isIntersection(int nodeId) {
-            return forwardVisited.containsKey(nodeId) && backwardVisited.containsKey(nodeId);
-        }
-    }
+	    public void addForwardLabel(int nodeId, Label label) {
+	        forwardVisited.computeIfAbsent(
+	            nodeId,
+	            k -> new PriorityBlockingQueue<>(MAX_LABELS_PER_NODE, maxHeapComparator)
+	        );
+	        boundedAdd(forwardVisited.get(nodeId), label);
+	    }
+
+	    public void addBackwardLabel(int nodeId, Label label) {
+	        backwardVisited.computeIfAbsent(
+	            nodeId,
+	            k -> new PriorityBlockingQueue<>(MAX_LABELS_PER_NODE, maxHeapComparator)
+	        );
+	        boundedAdd(backwardVisited.get(nodeId), label);
+	    }
+
+	    public void addIntersectionNode(int nodeId) {
+	        intersectionNodes.add(nodeId);
+	    }
+
+	    public boolean isIntersection(int nodeId) {
+	        return forwardVisited.containsKey(nodeId) && backwardVisited.containsKey(nodeId);
+	    }
+
+	    /**
+	     * Efficient bounded insert:
+	     * - If heap not full → add directly
+	     * - If full → only replace if new label has higher score than min in heap
+	     */
+	    private void boundedAdd(PriorityBlockingQueue<Label> heap, Label label) {
+	        if (heap.size() < MAX_LABELS_PER_NODE) {
+	            heap.offer(label);
+	        } else {
+	            Label min = heap.peek(); // in max-heap comparator, this is the lowest in top-K
+	            if (min != null && label.getMaxScore() > min.getMaxScore()) {
+	                heap.poll();
+	                heap.offer(label);
+	            }
+	        }
+	    }
+	}
+
 
 	public Result driver() throws InterruptedException, ExecutionException {
 		Graph.forwardAstar(source, destination, budget);
@@ -138,13 +167,13 @@ public class BidirectionalDriver {
 		return null;
 	}
 
-	private Result formOutputLabels1(Set<Integer> intersectionNodes, Map<Integer, List<Label>> forward_labels, Map<Integer, List<Label>> backward_labels) {
+	private Result formOutputLabels1(Set<Integer> intersectionNodes, ConcurrentHashMap<Integer, PriorityBlockingQueue<Label>> forwardVisited, ConcurrentHashMap<Integer, PriorityBlockingQueue<Label>> backwardVisited) {
 		Result finalResult = null;
 		
 		for(int current_join_node:intersectionNodes) {
-			List<Label> current_backward_labels = backward_labels.get(current_join_node);
-			List<Label> current_forward_labels = forward_labels.get(current_join_node);
-			//printLabel(current_join_node, current_forward_labels, current_backward_labels);
+			PriorityBlockingQueue<Label> current_backward_labels = backwardVisited.get(current_join_node);
+			PriorityBlockingQueue<Label> current_forward_labels = forwardVisited.get(current_join_node);
+			printLabel(current_join_node, current_forward_labels, current_backward_labels);
 			System.out.println("Node: " + current_join_node + ", Forward: " + current_forward_labels.size() + ", Backward: " + current_backward_labels.size() + ", Total: " + (long)current_forward_labels.size()*(long)current_backward_labels.size());
 			long i=0;
 			for(Label current_backward_label:current_backward_labels) {
@@ -171,7 +200,7 @@ public class BidirectionalDriver {
 		return finalResult;
 	}
 	
-	private void printLabel(int node, List<Label> forward_labels, List<Label> backward_labels) {
+	private void printLabel(int node, PriorityBlockingQueue<Label> current_forward_labels, PriorityBlockingQueue<Label> current_backward_labels) {
 		String output_file = "Analysis_" + node + ".txt";
 		FileWriter fout = null;
 		try {
@@ -185,7 +214,7 @@ public class BidirectionalDriver {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-		for(Label label:forward_labels) {
+		for(Label label:current_forward_labels) {
 			write(writer, label, source, node, true);
 		}
 		
@@ -194,7 +223,7 @@ public class BidirectionalDriver {
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-		for(Label label:backward_labels) {
+		for(Label label:current_backward_labels) {
 			write(writer, label, node, destination, false);
 		}
 		try {
@@ -278,11 +307,11 @@ public class BidirectionalDriver {
 		
 	}
 
-	private Result formOutputLabels(Set<Integer> intersectionNodes, Map<Integer, List<Label>> forward_labels, Map<Integer, List<Label>> backward_labels) {
+	private Result formOutputLabels(Set<Integer> intersectionNodes, ConcurrentHashMap<Integer, PriorityBlockingQueue<Label>> forwardVisited, ConcurrentHashMap<Integer, PriorityBlockingQueue<Label>> backwardVisited) {
 
 		return intersectionNodes.parallelStream().map(current_join_node -> {
-			List<Label> current_backward_labels = backward_labels.get(current_join_node);
-			List<Label> current_forward_labels = forward_labels.get(current_join_node);
+			PriorityBlockingQueue<Label> current_backward_labels = backwardVisited.get(current_join_node);
+			PriorityBlockingQueue<Label> current_forward_labels = forwardVisited.get(current_join_node);
 			
 //			if (current_backward_labels == null || current_forward_labels == null) 
 //				return null;

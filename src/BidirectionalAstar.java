@@ -56,7 +56,7 @@ public class BidirectionalAstar {
 	public static void main(String[] args) throws IOException, InterruptedException, ExecutionException{
 		//currentDirectory = args[0];
 		//String s = "6105";//args[0];
-		int n = 23947347;//Integer.parseInt(args[1]);
+		int n = 264346;//Integer.parseInt(args[1]);
 		density = 20;//Integer.parseInt(args[2]);
 		overhead = 30;//Double.parseDouble(args[3]);
 		no_of_core = 30;//Integer.parseInt(args[4]);
@@ -68,8 +68,8 @@ public class BidirectionalAstar {
 		Graph.set_vertex_count(n);
 		extract_nodes();
 		extract_edges();
-		if(n==23947347)
-			create_query_file();
+		//if(n==23947347)
+			//create_query_file();
 		create_query_bucket();
 		query_processing();
 	}
